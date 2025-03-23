@@ -8,8 +8,8 @@
 #include <ESP_Mail_Client.h> // 📌 SMTP Library for Email Sending
 
 // WiFi credentials
-char ssid[] = "Doctor\"s House";
-char pass[] = "password";
+char ssid[] = "Doctor\"s House"; // put your hotspot name here
+char pass[] = "password";        // put your password here
 
 // Blynk authentication token
 char auth[] = "w_jIRRzlgar4K7yGjx-DrA0oAbyBRGTb";
@@ -19,10 +19,10 @@ char auth[] = "w_jIRRzlgar4K7yGjx-DrA0oAbyBRGTb";
 #define SMTP_PORT 465
 
 // ✅ Replace with your credentials
-#define SENDER_EMAIL "harisahmad200411@gmail.com"
+#define SENDER_EMAIL "your email here"                     // 🔹 Use Gmail Address
 #define SENDER_PASSWORD "put ur google app password here " // 🔹 Use Google App Password
 // steps to create google app password are given in readme
-#define RECIPIENT_EMAIL "unnamed114477@gmail.com"
+#define RECIPIENT_EMAIL "reciever email here" // 🔹 Recipient Email Address
 
 // Button Pin
 #define BUTTON_PIN 0 // GPIO0 (D3)
