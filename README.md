@@ -1,6 +1,6 @@
 # Fall Detection System
 
-This project uses a NodeMCU ESP8266 and MPU6050 accelerometer to detect falls and send email alerts when a fall is detected. The system can also trigger an alert manually using a push button.
+This project uses a NodeMCU ESP8266, MPU6050 accelerometer, and GPS module to detect falls and send email alerts with location information when a fall is detected. The system can also trigger an alert manually using a push button.
 
 ## Table of Contents
 
@@ -10,6 +10,7 @@ This project uses a NodeMCU ESP8266 and MPU6050 accelerometer to detect falls an
   - [2. Install Required Libraries](#2-install-required-libraries)
   - [3. Setting up NodeMCU Board](#3-setting-up-nodemcu-board)
   - [4. Setting up Gmail App Password](#4-setting-up-gmail-app-password)
+- [GPS Module Integration](#gps-module-integration)
 - [Configuring the Project](#configuring-the-project)
 - [Uploading the Code](#uploading-the-code)
 - [How it Works](#how-it-works)
@@ -18,6 +19,7 @@ This project uses a NodeMCU ESP8266 and MPU6050 accelerometer to detect falls an
 
 - NodeMCU ESP8266 board
 - MPU6050 Accelerometer/Gyroscope
+- GPS Module (like NEO-6M)
 - Push button
 - Jumper wires
 - USB cable for programming
@@ -39,6 +41,8 @@ This project uses a NodeMCU ESP8266 and MPU6050 accelerometer to detect falls an
    - **ESP8266WiFi** - For WiFi connectivity with NodeMCU
    - **Blynk** - For IoT connectivity (if using Blynk)
    - **ESP_Mail_Client** - For sending email alerts
+   - **TinyGPSPlus** - For GPS functionality
+   - **ArduinoJson** - For parsing JSON responses (needed for IP geolocation)
    - **Wire** - For I2C communication (usually pre-installed)
    - **Time** - For time management
 
@@ -58,6 +62,7 @@ For the included libraries:
 - **BlynkESP8266_Lib**: Additional Blynk support for ESP8266
 - **ESP_Mail_Client**: Library for sending emails using ESP8266/ESP32
 - **Time**: Library for time-related functions
+- **TinyGSM**: Library for cellular communication (if using GSM module)
 
 ### 3. Setting up NodeMCU Board
 
@@ -105,6 +110,44 @@ Since we're using SMTP to send email alerts, you need to set up an App Password 
 10. Google will display a 16-character app password (without spaces)
 11. Copy this password and keep it secure - you'll need it for the project
 
+## GPS Module Integration
+
+The fall detection system uses a GPS module to provide accurate location information when a fall is detected. This location is included in the emergency email alert.
+
+### Hardware Connection
+
+1. Connect the GPS module to NodeMCU:
+   - GPS VCC to NodeMCU 3.3V
+   - GPS GND to NodeMCU GND
+   - GPS TX to NodeMCU D6 (GPIO12)
+   - GPS RX to NodeMCU D5 (GPIO14)
+
+### GPS Libraries
+
+Two main libraries are used for the GPS functionality:
+
+1. **TinyGPSPlus**: A lightweight GPS parsing library
+
+   - Install from Arduino Library Manager by searching for "TinyGPSPlus"
+
+2. **ArduinoJson**: Used for parsing IP geolocation data (backup when GPS signal is unavailable)
+   - Install from Arduino Library Manager by searching for "ArduinoJson"
+   - Version 6.x or above is recommended
+
+### Location Detection
+
+The system uses two methods to determine location:
+
+1. **GPS Module**: Provides highly accurate outdoor location data
+2. **IP Geolocation**: Fallback method when GPS data is not available
+   - Uses the free IP API service (ip-api.com)
+
+When an emergency alert is triggered, the system will:
+
+1. First try to use GPS coordinates
+2. If GPS data is invalid, use IP-based geolocation as a fallback
+3. Include a Google Maps link in the emergency email
+
 ## Configuring the Project
 
 1. Open the `fall_detection_2.ino` file in Arduino IDE
@@ -141,6 +184,11 @@ The system uses an MPU6050 accelerometer/gyroscope to detect falls by monitoring
 2. Impact detection - when a sudden high acceleration occurs
 3. Orientation change - when the person's orientation changes significantly
 
-When a fall is detected or when the button is pressed, the system sends an email alert to the designated recipient using the SMTP server.
+When a fall is detected or when the button is pressed, the system:
+
+1. Attempts to get the current GPS location
+2. Falls back to IP-based geolocation if GPS data is unavailable
+3. Sends an email alert with location information to the designated recipient
+4. Includes a Google Maps link in the email for easy location tracking
 
 The system also allows integration with Blynk IoT platform for monitoring the accelerometer values in real-time through a mobile app.
