@@ -6,10 +6,15 @@
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
 #include <ESP_Mail_Client.h> // 📌 SMTP Library for Email Sending
+#include <SoftwareSerial.h>
+#include <TinyGPS++.h>
+#include <ESP8266HTTPClient.h>
+#include <ArduinoJson.h>
+#include <WiFiClient.h>
 
 // WiFi credentials
-char ssid[] = "Doctor\"s House"; // put your hotspot name here
-char pass[] = "password";        // put your password here
+char ssid[] = "Unknown";
+char pass[] = "nopassword";
 
 // Blynk authentication token
 char auth[] = "w_jIRRzlgar4K7yGjx-DrA0oAbyBRGTb";
@@ -19,13 +24,18 @@ char auth[] = "w_jIRRzlgar4K7yGjx-DrA0oAbyBRGTb";
 #define SMTP_PORT 465
 
 // ✅ Replace with your credentials
-#define SENDER_EMAIL "your email here"                     // 🔹 Use Gmail Address
-#define SENDER_PASSWORD "put ur google app password here " // 🔹 Use Google App Password
-// steps to create google app password are given in readme
-#define RECIPIENT_EMAIL "reciever email here" // 🔹 Recipient Email Address
+#define SENDER_EMAIL "harisahmad200411@gmail.com"
+#define SENDER_PASSWORD "" // 🔹 Use Google App Password
+#define RECIPIENT_EMAIL "unnamed114477@gmail.com"
 
 // Button Pin
 #define BUTTON_PIN 0 // GPIO0 (D3)
+
+// GPS Module Pins (Changed from D2/D1 to D6/D5)
+#define GPS_RX 12 // D6 (GPIO12)
+#define GPS_TX 14 // D5 (GPIO14)
+SoftwareSerial gpsSerial(GPS_RX, GPS_TX);
+TinyGPSPlus gps;
 
 // SMTP Session
 SMTPSession smtp;
@@ -34,7 +44,7 @@ SMTPSession smtp;
 const int MPU_addr = 0x68;
 int16_t AcX, AcY, AcZ, GyX, GyY, GyZ, Tmp;
 float ax, ay, az, gx, gy, gz;
-boolean fall = false, trigger1 = false, trigger2 = false, trigger3 = false;
+boolean fall = false, trigger1 = false, trigger2 = false, trigger3 = false, impactDetected = false;
 byte trigger1count = 0, trigger2count = 0, trigger3count = 0;
 int angleChange = 0;
 int maxImpact = 0;
@@ -48,6 +58,8 @@ void setup()
     Wire.write(0x6B);
     Wire.write(0);
     Wire.endTransmission(true);
+
+    gpsSerial.begin(9600);
 
     Serial.println("Connecting to WiFi...");
     WiFi.begin(ssid, pass);
@@ -66,11 +78,16 @@ void loop()
     // Blynk.run();
     mpu_read();
     process_fall_detection();
+    while (gpsSerial.available())
+    {
+        gps.encode(gpsSerial.read());
+    }
+
     if (digitalRead(BUTTON_PIN) == LOW)
-    { // 🔘 Button Pressed (LOW)
-        Serial.println("📩 Button Pressed! Sending Email...");
-        sendEmail();
-        delay(5000); // 🕒 Avoid multiple presses
+    {
+        Serial.println("📩 Button Pressed! Sending Emergency Email...");
+        sendEmergencyEmail("🚨 BUTTON PRESSED! I NEED HELP!", "I have pressed the emergency button. Please check on me immediately.");
+        delay(5000);
     }
     delay(100);
 }
@@ -92,13 +109,20 @@ void mpu_read()
     GyY = Wire.read() << 8 | Wire.read();
     GyZ = Wire.read() << 8 | Wire.read();
 
-    ax = (AcX - (-155)) / 16384.00;
-    ay = (AcY - (-165)) / 16384.00;
-    az = (AcZ - (-661)) / 16384.00;
+    //  AcX Offset: 17332
+    // AcY Offset: 478
+    // AcZ Offset: -15546
+    // GyX Offset: -697
+    // GyY Offset: 193
+    // GyZ Offset: -319
 
-    gx = (GyX - (-491)) / 131.07;
-    gy = (GyY - 525) / 131.07;
-    gz = (GyZ - (-571)) / 131.07;
+    ax = (AcX - (17332)) / 16384.00;
+    ay = (AcY - (478)) / 16384.00;
+    az = (AcZ - (-15546)) / 16384.00;
+
+    gx = (GyX - (-697)) / 131.07;
+    gy = (GyY - 193) / 131.07;
+    gz = (GyZ - (-319)) / 131.07;
 
     // 📌 Print acceleration values to Serial Monitor
     Serial.print("Acceleration (m/s²) - X: ");
@@ -134,120 +158,89 @@ void process_fall_detection()
     Serial.print("Amp value = ");
     Serial.println(Amp);
 
-    if (Amp <= 2 && trigger2 == false)
-    { // If acceleration drops below 0.4g (free fall detected)
+    if (Amp <= 4 && !trigger2)
+    {
         trigger1 = true;
-        Serial.println("🛑 TRIGGER 1 ACTIVATED - FREE FALL DETECTED!");
-        maxImpact = 0; // Reset max impact when free fall starts
+        Serial.println("🛑 FREE FALL DETECTED!");
+        maxImpact = 0;
         delay(50);
     }
 
-    if (trigger1 == true)
+    if (trigger1)
     {
         trigger1count++;
-        maxImpact = max(maxImpact, Amp); // Keep track of the highest acceleration
+        maxImpact = max(maxImpact, Amp);
 
-        Serial.print("📈 Max Impact Recorded = ");
-        Serial.println(maxImpact); // Debugging impact detection
-
-        if (maxImpact >= 8)
-        { // If impact is detected after free fall
+        if (maxImpact >= 6)
+        {
             trigger2 = true;
-            Serial.println("💥 TRIGGER 2 ACTIVATED - IMPACT DETECTED!");
+            impactDetected = true;
+            Serial.println("💥 IMPACT DETECTED! Sending Impact Alert...");
+            sendEmergencyEmail("💥 IMPACT DETECTED!", "A strong impact has been detected. Please check on me immediately!");
             trigger1 = false;
             trigger1count = 0;
         }
     }
 
-    if (trigger2 == true)
+    if (trigger2)
     {
         trigger2count++;
         angleChange = sqrt(gx * gx + gy * gy + gz * gz);
-        Serial.print("📐 Angle Change = ");
-        Serial.println(angleChange);
 
         if (angleChange >= 30 && angleChange <= 400)
-        { // If orientation changes significantly
+        {
             trigger3 = true;
             trigger2 = false;
             trigger2count = 0;
-            Serial.println("🔄 TRIGGER 3 ACTIVATED - ORIENTATION CHANGE DETECTED!");
+            Serial.println("🔄 ORIENTATION CHANGE DETECTED!");
         }
     }
 
-    if (trigger3 == true)
+    if (trigger3)
     {
         trigger3count++;
         if (trigger3count >= 10)
         {
             angleChange = sqrt(gx * gx + gy * gy + gz * gz);
-            Serial.print("🔍 Final Angle Change = ");
-            Serial.println(angleChange);
-
-            if (angleChange >= 0 && angleChange <= 10)
-            { // If user remains in the fallen position
+            if (angleChange <= 20)
+            {
                 fall = true;
                 trigger3 = false;
                 trigger3count = 0;
-                Serial.println("⚠️ FALL DETECTED! Sending Alert...");
-                sendEmail();
+                Serial.println("⚠️ FALL DETECTED! Sending Emergency Alert...");
+                sendEmergencyEmail("🚨 FALL DETECTED!", "A fall has been detected. I might need immediate assistance!");
             }
             else
-            { // User regained normal orientation
+            {
                 trigger3 = false;
                 trigger3count = 0;
-                Serial.println("✅ TRIGGER 3 DEACTIVATED - NO FALL DETECTED.");
+                Serial.println("✅ No Fall Detected.");
             }
         }
     }
-
-    if (fall == true)
-    { // If a fall was detected
-        Serial.println("🚨 FALL CONFIRMED! Sending Email...");
-        sendEmail();
-        fall = false;
-    }
-
-    if (trigger2count >= 6)
-    { // Allow time for orientation change
-        trigger2 = false;
-        trigger2count = 0;
-        Serial.println("⏳ TRIGGER 2 DEACTIVATED - TIMEOUT");
-    }
-
-    if (trigger1count >= 6)
-    { // Allow time for impact detection
-        trigger1 = false;
-        trigger1count = 0;
-        Serial.println("⏳ TRIGGER 1 DEACTIVATED - TIMEOUT");
-    }
-
-    delay(100);
 }
-// 📌 Function to Send Email
-void sendEmail()
+
+// 📩 Function to Send Emergency Email
+void sendEmergencyEmail(String subject, String body)
 {
     smtp.debug(1);
-
     ESP_Mail_Session session;
     session.server.host_name = SMTP_HOST;
     session.server.port = SMTP_PORT;
     session.login.email = SENDER_EMAIL;
     session.login.password = SENDER_PASSWORD;
-    session.login.user_domain = "";
 
     SMTP_Message message;
-    message.sender.name = "ESP8266 Button Test";
+    message.sender.name = "Fall Detection System";
     message.sender.email = SENDER_EMAIL;
-    message.subject = "📩 Button Pressed!";
-    message.addRecipient("User", RECIPIENT_EMAIL);
+    message.subject = subject;
+    message.addRecipient("Emergency Contact", RECIPIENT_EMAIL);
 
-    String htmlMsg = "<div style=\"color:#0000FF;\"><h1>ESP8266 Email Test</h1>"
-                     "<p>This email was sent when the button was pressed.</p></div>";
+    String locationInfo = getLocation();
+    body += "<br><br><b>" + locationInfo + "</b>";
 
+    String htmlMsg = "<div style=\"color:#FF0000;\"><h1>" + subject + "</h1><p>" + body + "</p></div>";
     message.html.content = htmlMsg.c_str();
-    message.text.charSet = "us-ascii";
-    message.html.transfer_encoding = Content_Transfer_Encoding::enc_7bit;
 
     if (!smtp.connect(&session))
     {
@@ -261,6 +254,68 @@ void sendEmail()
     }
     else
     {
-        Serial.println("✅ Email Sent Successfully!");
+        Serial.println("✅ EMERGENCY EMAIL SENT SUCCESSFULLY!");
     }
+}
+
+String getLocation()
+{
+    if (gps.location.isValid())
+    {
+        float latitude = gps.location.lat();
+        float longitude = gps.location.lng();
+        String googleMapsLink = "https://www.google.com/maps/search/?api=1&query=" + String(latitude, 6) + "," + String(longitude, 6);
+        return "📍 GPS Location: " + String(latitude, 6) + ", " + String(longitude, 6) + "<br><a href='" + googleMapsLink + "' target='_blank'>📍 View on Google Maps</a>";
+    }
+    Serial.println("⚠️ GPS data unavailable. Trying IP-based location...");
+    return getIPGeolocation();
+}
+
+String getIPGeolocation()
+{
+    WiFiClient client;
+    HTTPClient http;
+    http.begin(client, "http://ip-api.com/json"); // ✅ Fixed API usage
+
+    int httpCode = http.GET(); // Make GET request
+    String payload = "";
+
+    if (httpCode > 0)
+    {
+        payload = http.getString();
+        Serial.println("📩 IP Geolocation Response: " + payload);
+
+        // Parse JSON response
+        StaticJsonDocument<512> doc;
+        DeserializationError error = deserializeJson(doc, payload);
+
+        if (!error)
+        {
+            String city = doc["city"].as<String>();
+            String country = doc["country"].as<String>();
+            float lat = doc["lat"].as<float>();
+            float lon = doc["lon"].as<float>();
+
+            // ✅ Convert IP location to Google Maps link
+            String googleMapsLink = "https://www.google.com/maps/search/?api=1&query=" +
+                                    String(lat, 6) + "," + String(lon, 6);
+
+            String locationInfo = "🌍 Location: " + city + ", " + country +
+                                  " (" + String(lat, 6) + ", " + String(lon, 6) + ")<br>" +
+                                  "<a href=\"" + googleMapsLink + "\" target=\"_blank\">📍 View on Google Maps</a>";
+
+            return locationInfo;
+        }
+        else
+        {
+            Serial.println("❌ JSON Parsing Error");
+        }
+    }
+    else
+    {
+        Serial.println("❌ HTTP Request Failed");
+    }
+
+    http.end();
+    return "⚠️ Unable to fetch IP location";
 }
