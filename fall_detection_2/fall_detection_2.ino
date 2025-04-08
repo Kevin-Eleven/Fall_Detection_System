@@ -1,10 +1,5 @@
-#define BLYNK_TEMPLATE_ID "TMPL3kzed1MYj"
-#define BLYNK_TEMPLATE_NAME "Fall Detection"
-#define BLYNK_PRINT Serial
-
 #include <Wire.h>
 #include <ESP8266WiFi.h>
-#include <BlynkSimpleEsp8266.h>
 #include <ESP_Mail_Client.h> // 📌 SMTP Library for Email Sending
 #include <SoftwareSerial.h>
 #include <TinyGPS++.h>
@@ -15,9 +10,6 @@
 // WiFi credentials
 char ssid[] = "Unknown";
 char pass[] = "nopassword";
-
-// Blynk authentication token
-char auth[] = "w_jIRRzlgar4K7yGjx-DrA0oAbyBRGTb";
 
 // 📌 SMTP Email Credentials
 #define SMTP_HOST "smtp.gmail.com"
@@ -70,12 +62,11 @@ void setup()
     }
     Serial.println("\nWiFi connected!");
 
-    // Blynk.begin(auth, ssid, pass);
 }
 
 void loop()
 {
-    // Blynk.run();
+ 
     mpu_read();
     process_fall_detection();
     while (gpsSerial.available())
@@ -141,13 +132,7 @@ void mpu_read()
     Serial.println(gz);
     Serial.println("----------------------------");
 
-    // Convert acceleration to m/s^2
-    Blynk.virtualWrite(V0, ax * 9.81);
-    Blynk.virtualWrite(V1, ay * 9.81);
-    Blynk.virtualWrite(V2, az * 9.81);
-    Blynk.virtualWrite(V3, GyX);
-    Blynk.virtualWrite(V4, GyY);
-    Blynk.virtualWrite(V5, GyZ);
+    // in units of g 
 }
 
 void process_fall_detection()
