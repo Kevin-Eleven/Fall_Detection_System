@@ -24,8 +24,8 @@ char pass[] = "nopassword";
 #define BUTTON_PIN 0 // GPIO0 (D3)
 
 // GPS Module Pins (Changed from D2/D1 to D6/D5)
-#define GPS_RX 12 // D6 (GPIO12)
-#define GPS_TX 14 // D5 (GPIO14)
+#define GPS_RX 12  // D5 (GPIO12)
+#define GPS_TX 14  // D6 (GPIO14)
 SoftwareSerial gpsSerial(GPS_RX, GPS_TX);
 TinyGPSPlus gps;
 
